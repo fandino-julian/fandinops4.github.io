@@ -1,29 +1,80 @@
 ---
-title: "problems4"
+title: "Problem set 4"
+author: "JULIAN FANDIÑO_202021070"
+date: "`r Sys.Date()`"
 output: html_document
-date: "2024-06-06"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+# Configuración del entorno
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(pacman)
+p_load(rio, data.table, tidyverse, sf, rvest, ggplot2, viridis, rmarkdown)
+
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r, eval=TRUE, echo=TRUE, message=FALSE, results='hide'}
+url <- "https://eduard-martinez.github.io/pset-4.html"
+webpage <- read_html(url)
+url_full <- webpage %>% html_nodes("a") %>% html_attr("href") %>% na.omit() %>% unique()
+url_full
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r, eval=TRUE, echo=TRUE, message=FALSE, results='hide'}
+# 1.2 Filtrar URLs que contienen la palabra "propiedad"
+url_subset <- url_full[grepl("propiedad", url_full)]
+url_subset
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r,eval=TRUE,echo=TRUE,message=FALSE}
+# 1.3 Extracción de las tablas de las URLs filtradas
+lista_tablas <- lapply(url_subset, function(link) {
+  page <- read_html(link)
+  table <- page %>% html_table(fill = TRUE) %>% .[[1]]
+  return(table)
+})
+# 1.4 Combinar las tablas en un solo dataframe
+db_house <- rbindlist(lista_tablas, fill = TRUE)
+colnames(db_house) <- make.names(colnames(db_house), unique = TRUE)
+
+## Mostrar las primeras filas del dataframe
+head(db_house)
+## Convertir las columnas lat y lon a valores numéricos
+db_house <- db_house %>%
+  mutate(lat = as.numeric(lat), lon = as.numeric(lon))
+
+# 2.1 Crear un objeto sf a partir del dataframe
+sf_house <- st_as_sf(db_house, coords = c("lon", "lat"), crs = 4326)
+
+# 2.2 Crear un mapa con ggplot2
+mapa <- ggplot() +
+  geom_sf(data = sf_house, aes(color = price), size = 2) +
+  scale_color_viridis() +
+  theme_minimal() +
+  labs(title = "Mapa de Propiedades", color = "Precio")
+
+## Mostrar el mapa
+mapa
+
+# Análisis del Mapa de Propiedades
+
+##El mapa de propiedades muestra la distribución espacial de las propiedades extraídas de las diferentes URLs contenidas en la página web especificada. Cada punto en el mapa representa una propiedad, y el color de los puntos indica el precio de la propiedad, utilizando una escala de colores proporcionada por la función `scale_color_viridis`.
+
+### Observaciones Principales:
+
+##1. **Distribución Geográfica:**
+   #- Los puntos en el mapa están distribuidos en varias ubicaciones, lo que indica que las propiedades cubren una amplia área geográfica. Esto puede ayudar a identificar concentraciones de propiedades en ciertas regiones.
+
+##2. **Variación de Precios:**
+   #- La escala de colores permite observar la variación de precios entre las propiedades. Los colores más claros indican precios más bajos, mientras que los colores más oscuros representan precios más altos.
+   #- Se pueden identificar patrones espaciales en los precios, como áreas donde las propiedades tienden a ser más caras o más baratas.
+
+##3. **Identificación de Áreas Clave:**
+  # - Algunas regiones pueden mostrar una alta densidad de propiedades con precios elevados, lo que puede señalar áreas urbanas o barrios exclusivos.
+   #- Por otro lado, áreas con muchos puntos de colores claros pueden indicar zonas más asequibles.
+
+
+## Guardar el mapa como un archivo PDF
+ggsave("mapa_propiedades.pdf", mapa)
+```
